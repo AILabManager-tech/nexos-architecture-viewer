@@ -76,6 +76,13 @@ body::before {
 
 /* ── HERO (macro view) ─────────────────────── */
 .hero { text-align: center; padding: 1.5rem 0 .5rem; width: 100%; }
+.hero-logo {
+  width: clamp(100px, 18vw, 160px); height: auto;
+  margin: 0 auto .5rem; display: block;
+  filter: drop-shadow(0 0 24px rgba(99,102,241,.2));
+  transition: filter .3s ease;
+}
+.hero-logo:hover { filter: drop-shadow(0 0 32px rgba(99,102,241,.4)); }
 .hero h1 {
   font-size: clamp(1.4rem, 3.5vw, 2rem); font-weight: 800;
   background: linear-gradient(135deg, #fff, var(--accent), var(--ph1));
@@ -327,6 +334,7 @@ details.tree-selected > summary {
   }
   #diagram-panel { min-height: 50vh; }
   .svg-wrap svg { min-width: 700px; }
+  .hero-logo { width: 90px; }
   .hero h1 { font-size: 1.3rem; }
   .hero-stats { gap: .8rem; }
   .stat .val { font-size: 1.2rem; }

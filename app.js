@@ -466,7 +466,7 @@ function attachDiagramHandlers(el) {
 // ─── SVG: MACRO PIPELINE (Level 0) ──────────────────
 function renderMacroSVG() {
   let h = `<div class="hero">
-    <h1>NEXOS v3.0</h1>
+    <img src="logo.svg" alt="NEXOS v3.0" class="hero-logo">
     <p class="tagline">Pipeline web autonome — du brief au déploiement</p>
     <div class="hero-stats">
       <div class="stat"><span class="val">${STATS.agents}</span><span class="lbl">Agents</span></div>
