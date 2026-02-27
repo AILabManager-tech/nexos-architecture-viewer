@@ -6,7 +6,6 @@
 // ─── STATE ───────────────────────────────────────────
 let view = 'macro';       // 'macro' | phaseId | sectionId
 let selected = null;       // highlighted node id within current view
-let breadcrumbPath = [];   // [{id, label, icon}]
 
 // ─── SVG HELPERS ─────────────────────────────────────
 const NS = 'http://www.w3.org/2000/svg';
@@ -40,10 +39,41 @@ function nodeG(x,y,w,h,color,label,sub,dataId,rx=10,tooltip='') {
   return s + '</g>';
 }
 function staticG(x,y,w,h,color,label,sub,rx=10) {
-  let s = rect(x,y,w,h,color,.12,rx);
+  let s = `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="${rx}" fill="${color}" fill-opacity=".08" stroke="${color}" stroke-width="1.5" stroke-dasharray="4 2"/>`;
   if (label) s += txt(x+w/2, y+h/2-(sub?6:0), label, 11);
   if (sub) s += txt(x+w/2, y+h/2+10, sub, 8, 'rgba(255,255,255,.5)', 400);
   return s;
+}
+
+function hexagonG(cx,cy,r,color,label,sub,dataId) {
+  const pts = [0,1,2,3,4,5].map(i => {
+    const a = Math.PI/3*i - Math.PI/2;
+    return `${cx+r*Math.cos(a)},${cy+r*Math.sin(a)}`;
+  }).join(' ');
+  let s = `<g class="node" data-id="${dataId}" style="--glow-color:${color}80" tabindex="0" role="button" aria-label="${esc(label+(sub?' — '+sub:''))}">`;
+  s += `<title>${esc(label+(sub?' — '+sub:''))}</title>`;
+  s += `<polygon points="${pts}" fill="${color}" fill-opacity=".15" stroke="${color}" stroke-width="1.5"/>`;
+  if (label) s += txt(cx, cy-(sub?5:0), label, 9);
+  if (sub) s += txt(cx, cy+9, sub, 7, 'rgba(255,255,255,.5)', 400);
+  return s + '</g>';
+}
+
+function diamondG(cx,cy,rw,rh,color,label,dataId) {
+  const pts = `${cx},${cy-rh} ${cx+rw},${cy} ${cx},${cy+rh} ${cx-rw},${cy}`;
+  let s = `<g class="node gate-glow" data-id="${dataId}" style="--glow-color:${color}80" tabindex="0" role="button" aria-label="${esc(label)}">`;
+  s += `<title>${esc(label)}</title>`;
+  s += `<polygon points="${pts}" fill="${color}" fill-opacity=".12" stroke="${color}" stroke-width="1.5"/>`;
+  s += txt(cx, cy+3, label, 8, color, 700);
+  return s + '</g>';
+}
+
+function circleNodeG(cx,cy,r,color,label,sub,dataId) {
+  let s = `<g class="node" data-id="${dataId}" style="--glow-color:${color}80" tabindex="0" role="button" aria-label="${esc(label+(sub?' — '+sub:''))}">`;
+  s += `<title>${esc(label+(sub?' — '+sub:''))}</title>`;
+  s += `<circle cx="${cx}" cy="${cy}" r="${r}" fill="${color}" fill-opacity=".15" stroke="${color}" stroke-width="1.5"/>`;
+  if (label) s += txt(cx, cy-(sub?5:0), label, 9);
+  if (sub) s += txt(cx, cy+9, sub, 7, 'rgba(255,255,255,.5)', 400);
+  return s + '</g>';
 }
 function gateG(x,y,w,h,label) {
   return `<g class="gate-glow"><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="6" fill="#22c55e" fill-opacity=".1" stroke="#22c55e" stroke-width="1.5" stroke-dasharray="4 2"/>${txt(x+w/2,y+h/2+1,label,10,'#22c55e',700)}</g>`;
@@ -336,7 +366,7 @@ const KNOWLEDGE = {id:'knowledge', name:'Knowledge', full:'SOIC-11 Knowledge Flo
 // ─── DATA: STATS ─────────────────────────────────────
 const STATS = {
   agents: 46, phases: 6, dimensions: 9, gates: 17,
-  checksLoi25: 28, templates: 15, tools: 6, modes: 5,
+  checksLoi25: 28, templates: 15, tools: 6, modeCount: 5,
   stack: ['Next.js 15+','TypeScript strict','Tailwind CSS','Vercel','next-intl','Framer Motion'],
   modes: ['create','audit','modify','content','knowledge']
 };
@@ -366,7 +396,6 @@ function getAgent(sectionId, agentId) {
 // ─── NAVIGATION ──────────────────────────────────────
 function updateHash() {
   const hash = view === 'macro' ? '' : (selected ? `${view}/${selected}` : view);
-  const target = hash ? `#${hash}` : ' ';
   if (location.hash.slice(1) !== hash) history.pushState(null, '', hash ? `#${hash}` : location.pathname);
 }
 
@@ -448,7 +477,19 @@ function renderDiagram() {
 }
 
 function attachDiagramHandlers(el) {
+  // Add export button if SVG present
+  if (el.querySelector('svg') && !el.querySelector('.export-btn')) {
+    el.style.position = 'relative';
+    const btn = document.createElement('button');
+    btn.className = 'export-btn';
+    btn.textContent = '⬇ SVG';
+    btn.title = 'Télécharger le diagramme SVG';
+    btn.addEventListener('click', (e) => { e.stopPropagation(); exportSVG(); });
+    el.appendChild(btn);
+  }
   el.querySelectorAll('.node').forEach(n => {
+    // C.8: different cursor in section view (highlight) vs macro (navigate)
+    if (view !== 'macro') n.classList.add('node-highlight');
     const handler = (e) => {
       e.stopPropagation();
       if (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ') return;
@@ -474,10 +515,18 @@ function renderMacroSVG() {
       <div class="stat"><span class="val">${STATS.dimensions}</span><span class="lbl">Dimensions</span></div>
       <div class="stat"><span class="val">${STATS.gates}</span><span class="lbl">Gates</span></div>
       <div class="stat"><span class="val">${STATS.checksLoi25}</span><span class="lbl">Checks Loi 25</span></div>
+    </div>
+    <p class="hero-desc">NEXOS orchestre 46 agents IA à travers 6 phases séquentielles — de l'analyse concurrentielle au déploiement Vercel — avec quality gates SOIC et conformité Loi 25 intégrée nativement.</p>
+    <div class="mode-chips">
+      <span class="mode-chip active" title="Pipeline complet : brief → site déployé">create</span>
+      <span class="mode-chip" title="Évaluation SOIC d'un site existant">audit</span>
+      <span class="mode-chip" title="Modification ciblée de pages existantes">modify</span>
+      <span class="mode-chip" title="Mise à jour contenu et traductions">content</span>
+      <span class="mode-chip" title="Consultation base de connaissances SOIC">knowledge</span>
     </div></div>`;
 
-  // Main pipeline
-  const W = 1100, H = 200;
+  // Unified SVG: pipeline + transversal modules + connectors
+  const W = 1100, H = 350;
   const nodes = [
     {id:'_brief', label:'Brief', sub:'JSON', color:'#64748b', x:10, static:true},
     {id:'ph0', label:'Phase 0', sub:'Discovery', color:'#3b82f6', x:130},
@@ -489,7 +538,7 @@ function renderMacroSVG() {
     {id:'ph5', label:'Phase 5', sub:'QA+Deploy', color:'#ef4444', x:850},
     {id:'_deploy', label:'Deploy', sub:'Vercel', color:'#22c55e', x:980, static:true},
   ];
-  const nW = 100, nH = 55, nY = 70;
+  const nW = 100, nH = 55, nY = 40;
   let svg = svgEl(W, H);
 
   // Arrows
@@ -500,31 +549,52 @@ function renderMacroSVG() {
   const gl = [{x:165,l:'μ≥7.0'},{x:285,l:'μ≥8.0'},{x:405,l:'μ≥8.0'},{x:525,l:'μ≥8.0'},{x:645,l:'BUILD'},{x:775,l:'scans'},{x:895,l:'μ≥8.5'}];
   gl.forEach(g => { svg += txt(g.x+30, nY+nH+22, g.l, 7, '#22c55e', 600); });
 
-  // Nodes
+  // Phase nodes
   nodes.forEach(n => {
     if (n.static) svg += staticG(n.x, nY, nW, nH, n.color, n.label, n.sub);
     else svg += nodeG(n.x, nY, nW, nH, n.color, n.label, n.sub, n.id);
   });
-  svg += '</svg>';
-  h += `<div class="svg-wrap">${svg}</div>`;
 
-  // Secondary row: transversal modules
-  const W2 = 1000, H2 = 85;
-  let svg2 = svgEl(W2, H2);
+  // Transversal modules (row 2)
+  const modY = 230;
   const sec = [
-    {id:'soic', label:'SOIC v3', sub:'9 dim.', color:'#a78bfa', x:10},
-    {id:'convergence', label:'Convergence', sub:'Boucle', color:'#f472b6', x:175},
-    {id:'site-update', label:'Site Update', sub:'Modify', color:'#14b8a6', x:340},
-    {id:'knowledge', label:'Knowledge', sub:'SOIC-11', color:'#818cf8', x:505},
-    {id:'templates', label:'Templates', sub:'15 fichiers', color:'#34d399', x:670},
-    {id:'loi25', label:'Loi 25', sub:'28 checks', color:'#fb923c', x:835},
+    {id:'soic', label:'SOIC v3', sub:'9 dim.', color:'#a78bfa', x:85},
+    {id:'convergence', label:'Convergence', sub:'Boucle', color:'#f472b6', x:250},
+    {id:'site-update', label:'Site Update', sub:'Modify', color:'#14b8a6', x:415},
+    {id:'knowledge', label:'Knowledge', sub:'SOIC-11', color:'#818cf8', x:580},
+    {id:'templates', label:'Templates', sub:'15 fich.', color:'#34d399', x:745},
+    {id:'loi25', label:'Loi 25', sub:'28 checks', color:'#fb923c', x:910},
   ];
   sec.forEach(n => {
-    svg2 += nodeG(n.x, 12, 150, 55, n.color, n.label, n.sub, n.id, 8);
+    svg += circleNodeG(n.x, modY, 30, n.color, n.label, n.sub, n.id);
   });
-  svg2 += '</svg>';
-  h += `<div class="svg-wrap" style="margin-top:.25rem">${svg2}</div>`;
-  h += `<p class="click-hint">Cliquez sur un bloc pour explorer son contenu</p>`;
+
+  // Connectors: dashed lines between pipeline and modules
+  // SOIC spans Ph0-Ph5
+  svg += `<line x1="${130+nW/2}" y1="${nY+nH+25}" x2="${850+nW/2}" y2="${nY+nH+25}" stroke="#a78bfa" stroke-width="1" stroke-dasharray="4 3" stroke-opacity=".3"/>`;
+  svg += `<line x1="${85}" y1="${modY-32}" x2="${(130+850+nW)/2}" y2="${nY+nH+25}" stroke="#a78bfa" stroke-width="1" stroke-dasharray="4 3" stroke-opacity=".25"/>`;
+  // Convergence Ph2-Ph4
+  svg += `<line x1="${370+nW/2}" y1="${nY+nH+28}" x2="${610+nW/2}" y2="${nY+nH+28}" stroke="#f472b6" stroke-width="1" stroke-dasharray="4 3" stroke-opacity=".3"/>`;
+  svg += `<line x1="${250}" y1="${modY-32}" x2="${(370+610+nW)/2}" y2="${nY+nH+28}" stroke="#f472b6" stroke-width="1" stroke-dasharray="4 3" stroke-opacity=".25"/>`;
+  // Tooling Ph4-Ph5
+  svg += `<line x1="${745}" y1="${modY-32}" x2="${730+nW/2}" y2="${nY+nH+5}" stroke="#34d399" stroke-width="1" stroke-dasharray="4 3" stroke-opacity=".25"/>`;
+  // Loi 25 all
+  svg += `<line x1="${910}" y1="${modY-32}" x2="${(130+850+nW)/2}" y2="${nY+nH+30}" stroke="#fb923c" stroke-width="1" stroke-dasharray="4 3" stroke-opacity=".2"/>`;
+
+  // Label: "Modules Transversaux"
+  svg += txt(W/2, modY-50, 'Modules Transversaux', 9, 'rgba(255,255,255,.35)', 600);
+
+  svg += '</svg>';
+  h += `<div class="svg-wrap">${svg}</div>`;
+  h += `<div class="legend">
+    <span class="legend-item"><span class="legend-dot" style="background:var(--accent);border-radius:2px"></span> Phase</span>
+    <span class="legend-item"><span class="legend-dot" style="background:var(--soic);clip-path:polygon(50% 0%,100% 25%,100% 75%,50% 100%,0% 75%,0% 25%)"></span> Agent / Dimension</span>
+    <span class="legend-item"><span class="legend-dot" style="background:#22c55e;clip-path:polygon(50% 0%,100% 50%,50% 100%,0% 50%)"></span> Gate SOIC</span>
+    <span class="legend-item"><span class="legend-dot" style="background:var(--tool);border-radius:50%"></span> Module</span>
+    <span class="legend-item"><span style="display:inline-block;width:20px;height:2px;background:var(--text3);margin-right:.15rem;vertical-align:middle"></span> Flow</span>
+  </div>`;
+  h += `<p class="click-hint">Cliquez sur un bloc pour explorer son contenu · <kbd style="font-size:.65rem;padding:.1rem .3rem;border:1px solid var(--border);border-radius:3px;font-family:var(--mono)">Ctrl+K</kbd> Recherche</p>`;
+  h += `<footer class="app-footer">Propulsé par <a href="https://marksystems.ca" target="_blank" rel="noopener">Mark Systems</a> · Pipeline NEXOS v3.0</footer>`;
   return h;
 }
 
@@ -549,8 +619,9 @@ function renderSectionSVG(sectionId) {
 // ─── SVG: Phase with agents (ph0-ph4, site-update) ──
 function renderAgentsSVG(section, agents) {
   const n = agents.length;
-  let h = `<div class="level-header">
-    <h1><span class="icon">${section.icon}</span>${section.name} — ${section.full}</h1>
+  let h = miniPipeline(section.id);
+  h += `<div class="level-header">
+    <h1><span class="icon">${section.icon}</span>${section.name} — ${section.full} <button class="back-btn" onclick="nav('macro')">← Retour</button></h1>
     <p class="sub">${n} agents${section.gate?' | Gate: '+section.gate:''}${section.timeout?' | Timeout: '+section.timeout:''}</p>
     <div class="color-bar" style="background:${section.color}"></div></div>`;
 
@@ -580,8 +651,8 @@ function renderAgentsSVG(section, agents) {
     const ax = startX + i*(aW+gap);
     const acx = ax + aW/2;
     svg += arrowP(`M${cx},${orchY+45} C${cx},${orchY+70} ${acx},${orchY+70} ${acx},${agentY-2}`, true, section.color);
-    svg += nodeG(ax, agentY, aW, aH, section.color, a.name, a.role.substring(0,16)+'…', a.id, 10, `${a.name} — ${a.role}`);
-    svg += arrowP(`M${acx},${agentY+aH} C${acx},${agentY+aH+22} ${cx},${agentY+aH+22} ${cx},${outputY-2}`, false);
+    svg += hexagonG(acx, agentY+aH/2, aH/2+2, section.color, a.name, '', a.id);
+    svg += arrowP(`M${acx},${agentY+aH+2} C${acx},${agentY+aH+22} ${cx},${agentY+aH+22} ${cx},${outputY-2}`, false);
   });
 
   // Output
@@ -589,21 +660,22 @@ function renderAgentsSVG(section, agents) {
     const outW = 240;
     svg += staticG(cx-outW/2, outputY, outW, 45, '#22c55e', section.output, section.outputSub||'');
     if (section.gate) {
-      svg += arrow(cx, outputY+47, cx, gateY-2, false, 'ahg');
-      svg += gateG(cx-75, gateY, 150, 38, `GATE: ${section.gate}`);
+      svg += arrow(cx, outputY+47, cx, gateY+5, false, 'ahg');
+      svg += diamondG(cx, gateY+25, 70, 20, '#22c55e', `GATE: ${section.gate}`, 'gate-'+section.id);
     }
   }
   svg += '</svg>';
   h += `<div class="svg-wrap">${svg}</div>`;
-  h += `<p class="click-hint">Cliquez un agent pour voir ses détails → panneau droit</p>`;
+  h += `<p class="click-hint">Cliquez un agent pour voir ses détails · Double-clic ou ← pour revenir</p>`;
   return h;
 }
 
 // ─── SVG: Phase 5 (grouped agents) ──────────────────
 function renderPh5SVG(phase) {
   const groups = phase.groups;
-  let h = `<div class="level-header">
-    <h1><span class="icon">${phase.icon}</span>${phase.name} — ${phase.full}</h1>
+  let h = miniPipeline(phase.id);
+  h += `<div class="level-header">
+    <h1><span class="icon">${phase.icon}</span>${phase.name} — ${phase.full} <button class="back-btn" onclick="nav('macro')">← Retour</button></h1>
     <p class="sub">23 agents en 8 groupes | Gate: ${phase.gate} | Timeout: ${phase.timeout}</p>
     <div class="color-bar" style="background:${phase.color}"></div></div>`;
 
@@ -649,14 +721,15 @@ function renderPh5SVG(phase) {
 
   svg += '</svg>';
   h += `<div class="svg-wrap">${svg}</div>`;
-  h += `<p class="click-hint">Cliquez un agent pour voir son processus</p>`;
+  h += `<p class="click-hint">Cliquez un agent pour voir son processus · Double-clic ou ← pour revenir</p>`;
   return h;
 }
 
 // ─── SVG: Tooling ────────────────────────────────────
 function renderToolingSVG(t) {
-  let h = `<div class="level-header">
-    <h1><span class="icon">${t.icon}</span>${t.name} — ${t.full}</h1>
+  let h = miniPipeline(t.id);
+  h += `<div class="level-header">
+    <h1><span class="icon">${t.icon}</span>${t.name} — ${t.full} <button class="back-btn" onclick="nav('macro')">← Retour</button></h1>
     <p class="sub">${t.desc}</p>
     <div class="color-bar" style="background:${t.color}"></div></div>`;
 
@@ -691,8 +764,9 @@ function renderToolingSVG(t) {
 
 // ─── SVG: SOIC ───────────────────────────────────────
 function renderSoicSVG(s) {
-  let h = `<div class="level-header">
-    <h1><span class="icon">${s.icon}</span>${s.name} — ${s.full}</h1>
+  let h = miniPipeline(s.id);
+  h += `<div class="level-header">
+    <h1><span class="icon">${s.icon}</span>${s.name} — ${s.full} <button class="back-btn" onclick="nav('macro')">← Retour</button></h1>
     <p class="sub">${s.desc}</p>
     <div class="color-bar" style="background:${s.color}"></div></div>`;
 
@@ -710,15 +784,20 @@ function renderSoicSVG(s) {
     const angle = (Math.PI*2*i/s.dims.length) - Math.PI/2;
     const dx = cx + Math.cos(angle)*r;
     const dy = cy + Math.sin(angle)*r;
-    const bw = 95, bh = 40;
+    const hr = 30;
     svg += `<line x1="${cx+Math.cos(angle)*44}" y1="${cy+Math.sin(angle)*44}" x2="${dx}" y2="${dy}" stroke="${dimC[i]}" stroke-width="1" stroke-opacity=".35"/>`;
     const cls = d.blocking ? ' class="pulse"' : '';
     svg += `<g${cls}>`;
+    // Hexagon node
+    const pts = [0,1,2,3,4,5].map(j => {
+      const a2 = Math.PI/3*j - Math.PI/2;
+      return `${dx+hr*Math.cos(a2)},${dy+hr*Math.sin(a2)}`;
+    }).join(' ');
     svg += `<g class="node" data-id="${d.id}" style="--glow-color:${dimC[i]}80" tabindex="0" role="button" aria-label="${esc(d.id+' '+d.name+' — '+d.desc)}">`;
     svg += `<title>${esc(d.id+' '+d.name+': '+d.desc+(d.blocking?' (BLOQUANT)':''))}</title>`;
-    svg += rect(dx-bw/2, dy-bh/2, bw, bh, dimC[i], .15, 7, d.blocking?2:1);
-    svg += txt(dx, dy-6, `${d.id} ${d.name}`, 8, '#e4e4ef', d.blocking?700:500);
-    svg += txt(dx, dy+7, `×${d.weight}${d.blocking?' ◄BLOQUANT':''}`, 6, d.blocking?'#ef4444':'rgba(255,255,255,.5)', d.blocking?700:400);
+    svg += `<polygon points="${pts}" fill="${dimC[i]}" fill-opacity=".15" stroke="${dimC[i]}" stroke-width="${d.blocking?2:1.5}"/>`;
+    svg += txt(dx, dy-5, `${d.id} ${d.name}`, 8, '#e4e4ef', d.blocking?700:500);
+    svg += txt(dx, dy+8, `×${d.weight}${d.blocking?' ◄BLQ':''}`, 6, d.blocking?'#ef4444':'rgba(255,255,255,.5)', d.blocking?700:400);
     svg += '</g></g>';
   });
 
@@ -730,8 +809,9 @@ function renderSoicSVG(s) {
 
 // ─── SVG: Convergence ────────────────────────────────
 function renderConvergenceSVG(c) {
-  let h = `<div class="level-header">
-    <h1><span class="icon">${c.icon}</span>${c.name} — ${c.full}</h1>
+  let h = miniPipeline(c.id);
+  h += `<div class="level-header">
+    <h1><span class="icon">${c.icon}</span>${c.name} — ${c.full} <button class="back-btn" onclick="nav('macro')">← Retour</button></h1>
     <p class="sub">${c.desc}</p>
     <div class="color-bar" style="background:${c.color}"></div></div>`;
 
@@ -780,8 +860,9 @@ function renderConvergenceSVG(c) {
 
 // ─── SVG: Templates ──────────────────────────────────
 function renderTemplatesSVG(t) {
-  let h = `<div class="level-header">
-    <h1><span class="icon">${t.icon}</span>${t.name} — ${t.full}</h1>
+  let h = miniPipeline(t.id);
+  h += `<div class="level-header">
+    <h1><span class="icon">${t.icon}</span>${t.name} — ${t.full} <button class="back-btn" onclick="nav('macro')">← Retour</button></h1>
     <p class="sub">${t.desc}</p>
     <div class="color-bar" style="background:${t.color}"></div></div>`;
 
@@ -814,14 +895,15 @@ function renderTemplatesSVG(t) {
 
   svg += '</svg>';
   h += `<div class="svg-wrap">${svg}</div>`;
-  h += `<p class="click-hint">Cliquez un template pour voir ses placeholders</p>`;
+  h += `<p class="click-hint">Cliquez un template pour voir ses placeholders · Double-clic ou ← pour revenir</p>`;
   return h;
 }
 
 // ─── SVG: Loi 25 ─────────────────────────────────────
 function renderLoi25SVG(l) {
-  let h = `<div class="level-header">
-    <h1><span class="icon">${l.icon}</span>${l.name} — ${l.full}</h1>
+  let h = miniPipeline(l.id);
+  h += `<div class="level-header">
+    <h1><span class="icon">${l.icon}</span>${l.name} — ${l.full} <button class="back-btn" onclick="nav('macro')">← Retour</button></h1>
     <p class="sub">${l.desc}</p>
     <div class="color-bar" style="background:${l.color}"></div></div>`;
 
@@ -852,14 +934,15 @@ function renderLoi25SVG(l) {
 
   svg += '</svg>';
   h += `<div class="svg-wrap">${svg}</div>`;
-  h += `<p class="click-hint">Cliquez un check pour voir le détail complet</p>`;
+  h += `<p class="click-hint">Cliquez un check pour voir le détail complet · Double-clic ou ← pour revenir</p>`;
   return h;
 }
 
 // ─── SVG: Knowledge ──────────────────────────────────
 function renderKnowledgeSVG(k) {
-  let h = `<div class="level-header">
-    <h1><span class="icon">${k.icon}</span>${k.name} — ${k.full}</h1>
+  let h = miniPipeline(k.id);
+  h += `<div class="level-header">
+    <h1><span class="icon">${k.icon}</span>${k.name} — ${k.full} <button class="back-btn" onclick="nav('macro')">← Retour</button></h1>
     <p class="sub">${k.desc}</p>
     <div class="color-bar" style="background:${k.color}"></div></div>`;
 
@@ -903,12 +986,37 @@ function attachTreeControls(el) {
   el.querySelectorAll('.tree-btn').forEach(btn => {
     btn.addEventListener('click', () => {
       const open = btn.dataset.action === 'expand';
-      el.querySelectorAll('details').forEach(d => d.open = open);
+      el.querySelectorAll('details').forEach(d => {
+        if (open) lazyLoad(d);
+        d.open = open;
+      });
     });
   });
+  // Lazy load on toggle
+  el.addEventListener('toggle', (e) => {
+    if (e.target.tagName === 'DETAILS' && e.target.open) lazyLoad(e.target);
+  }, true);
+}
+
+function lazyLoad(details) {
+  const key = details.dataset.lazy;
+  if (!key) return;
+  const fn = LAZY_CONTENT[key];
+  if (fn) {
+    details.querySelector('.tree-children').innerHTML = fn();
+    // Recursively attach lazy listeners for nested details
+    details.querySelectorAll('details[data-lazy]').forEach(nested => {
+      // Already handled by event delegation above
+    });
+  }
+  delete details.dataset.lazy;
+  delete LAZY_CONTENT[key];
 }
 
 function renderTree() {
+  // Reset lazy content registry
+  Object.keys(LAZY_CONTENT).forEach(k => delete LAZY_CONTENT[k]);
+  _lazyId = 0;
   const el = document.getElementById('detail-panel');
   if (view === 'macro') { el.innerHTML = renderMacroTree(); attachTreeControls(el); return; }
   const s = getSection(view);
@@ -938,29 +1046,72 @@ function renderMacroTree() {
   let h = treeControls();
   h += '<div class="tree-root">';
 
-  // Stats summary
-  h += detailsNode('📊', 'Récapitulatif NEXOS v3.0', true, () => {
-    let c = kv('Agents', STATS.agents) + kv('Phases', STATS.phases);
+  // How it works — narrative
+  h += detailsNode('💡', 'Comment ça marche', true, () => {
+    return `<div class="v" style="padding:.3rem 0;font-size:.8rem;line-height:1.5;color:var(--text2)">
+      NEXOS transforme un brief client en site web complet via <strong style="color:var(--text)">6 phases séquentielles</strong>.
+      Chaque phase est exécutée par des agents IA spécialisés, validée par un <strong style="color:var(--text)">quality gate SOIC</strong>,
+      puis itérée automatiquement si le score est insuffisant (max 4 itérations).
+      Le pipeline intègre nativement la <strong style="color:var(--text)">conformité Loi 25 Québec</strong> via 28 points de vérification.
+    </div>`;
+  });
+
+  // Modes d'opération — tableau comparatif
+  h += detailsNode('🎛', 'Modes d\'opération', false, () => {
+    const modeData = [
+      {name:'create', desc:'Pipeline complet — brief → déploiement', phases:'Ph0-Ph5'},
+      {name:'audit', desc:'Évaluation SOIC d\'un site existant', phases:'Ph5 (QA uniquement)'},
+      {name:'modify', desc:'Modification ciblée de pages existantes', phases:'Site Update → Ph4-Ph5'},
+      {name:'content', desc:'Mise à jour contenu et traductions', phases:'Ph3 → Ph5'},
+      {name:'knowledge', desc:'Consultation base de connaissances SOIC', phases:'Knowledge Flow'}
+    ];
+    return modeData.map(m =>
+      `<div class="kv" style="align-items:flex-start"><span class="k" style="font-family:var(--mono);color:var(--accent);min-width:70px">${m.name}</span><span class="v">${esc(m.desc)}<br><span style="color:var(--text3);font-size:.7rem">${m.phases}</span></span></div>`
+    ).join('');
+  });
+
+  // Métriques clés
+  h += detailsNode('📊', 'Métriques clés', true, () => {
+    let c = kv('Agents IA', STATS.agents) + kv('Phases', STATS.phases);
     c += kv('Dimensions SOIC', STATS.dimensions) + kv('Gates', STATS.gates);
-    c += kv('Checks Loi 25', STATS.checksLoi25) + kv('Templates', STATS.templates);
-    c += kv('Outils Preflight', STATS.tools) + kv('Modes', STATS.modes.join(', '));
-    c += kv('Stack', STATS.stack.join(', '));
+    c += kv('Checks Loi 25', STATS.checksLoi25) + kv('Templates sécurisés', STATS.templates);
+    c += kv('Outils Preflight', STATS.tools) + kv('Modes', `${STATS.modeCount} (${STATS.modes.join(', ')})`);
     return c;
   });
 
-  // Phases
-  PHASES.forEach(p => {
-    const agentCount = p.agents ? p.agents.length : (p.groups ? p.groups.reduce((s,g) => s+g.agents.length, 0) : 0);
-    h += detailsNode(p.icon, `${p.name} — ${p.full}`, false, () => {
-      let c = kv('Agents', agentCount) + kv('Gate', p.gate) + kv('Timeout', p.timeout);
-      c += kv('Input', p.input) + kv('Output', p.output);
-      return c;
-    });
+  // Stack technique
+  h += detailsNode('🛠', 'Stack technique', false, () => {
+    return STATS.stack.map(t =>
+      `<div class="tree-chip-list" style="display:inline"><span class="tree-chip">${esc(t)}</span></div>`
+    ).join('');
   });
 
-  // Transversal modules
-  [TOOLING, SOIC, CONVERGENCE, TEMPLATES, LOI25, SITE_UPDATE, KNOWLEDGE].forEach(s => {
-    h += detailsNode(s.icon, `${s.name} — ${s.full}`, false, () => kv('Description', s.desc));
+  // Exemple réel — USINE_RH
+  h += detailsNode('🏆', 'Exemple réel — USINE_RH', false, () => {
+    let c = kv('Client', SOIC_EXAMPLE.client);
+    c += `<div class="kv"><span class="k">Score μ</span><span class="v"><span class="score-badge score-pass">${SOIC_EXAMPLE.mu} ${SOIC_EXAMPLE.verdict}</span></span></div>`;
+    c += '<div style="margin:.3rem 0">';
+    c += `<div class="k" style="margin-bottom:.2rem">SCORES PAR DIMENSION</div>`;
+    Object.entries(SOIC_EXAMPLE.scores).forEach(([dim, score]) => {
+      const pct = (score/10*100).toFixed(0);
+      c += `<div style="display:flex;align-items:center;gap:.4rem;padding:.1rem 0;font-size:.76rem">
+        <span style="width:22px;color:var(--accent);font-family:var(--mono)">${dim}</span>
+        <div style="flex:1;height:4px;background:rgba(255,255,255,.06);border-radius:2px;overflow:hidden"><div style="width:${pct}%;height:100%;background:var(--accent);border-radius:2px"></div></div>
+        <span style="width:28px;text-align:right;color:var(--text2);font-family:var(--mono)">${score}</span>
+      </div>`;
+    });
+    c += '</div>';
+    return c;
+  });
+
+  // Phases (compact)
+  h += detailsNode('📋', 'Phases du pipeline', false, () => {
+    return PHASES.map(p => {
+      const agentCount = p.agents ? p.agents.length : (p.groups ? p.groups.reduce((s,g) => s+g.agents.length, 0) : 0);
+      return detailsNode(p.icon, `${p.name} — ${p.full}`, false, () => {
+        return kv('Agents', agentCount) + kv('Gate', p.gate) + kv('Timeout', p.timeout) + kv('Input', p.input) + kv('Output', p.output);
+      }, null, p.color);
+    }).join('');
   });
 
   h += '</div>';
@@ -990,7 +1141,7 @@ function buildAgentsTree(s) {
     if (s.input) c += kv('Input', s.input);
     if (s.output) c += kv('Output', s.output);
     return c;
-  });
+  }, null, s.color);
 
   h += detailsNode('🤖', `Agents (${s.agents.length})`, true, () => {
     return s.agents.map(a => buildAgentNode(a)).join('');
@@ -1074,6 +1225,16 @@ function buildSoicTree(s) {
     }).join('');
   });
 
+  // Exemple réel
+  h += detailsNode('🏆', `Exemple réel — ${SOIC_EXAMPLE.client}`, false, () => {
+    let c = `<div class="kv"><span class="k">Score μ</span><span class="v"><span class="score-badge score-pass">${SOIC_EXAMPLE.mu} ${SOIC_EXAMPLE.verdict}</span></span></div>`;
+    Object.entries(SOIC_EXAMPLE.scores).forEach(([dim, score]) => {
+      const dimInfo = s.dims.find(d => d.id === dim);
+      c += kv(dim + (dimInfo ? ' '+dimInfo.name : ''), score + '/10');
+    });
+    return c;
+  });
+
   return h;
 }
 
@@ -1155,11 +1316,24 @@ function buildKnowledgeTree(k) {
 }
 
 // ─── TREE HELPERS ────────────────────────────────────
-function detailsNode(icon, label, openDefault, contentFn, dataId) {
+const LAZY_CONTENT = {};
+let _lazyId = 0;
+
+function detailsNode(icon, label, openDefault, contentFn, dataId, color) {
   const idAttr = dataId ? ` data-tree-id="${dataId}"` : '';
-  return `<details${openDefault?' open':''}${idAttr}>
-    <summary><span class="tree-icon">${icon}</span> ${esc(label)}</summary>
-    <div class="tree-children">${contentFn()}</div>
+  const tag = color ? `<span class="tree-tag" style="background:${color}20;color:${color}">` + esc(label.split(' — ')[0]) + '</span> ' : '';
+  const displayLabel = color ? (label.includes(' — ') ? label.split(' — ')[1] : label) : label;
+  if (openDefault) {
+    return `<details open${idAttr}>
+      <summary><span class="tree-icon">${icon}</span> ${tag}${esc(displayLabel)}</summary>
+      <div class="tree-children">${contentFn()}</div>
+    </details>`;
+  }
+  const key = 'lazy-' + (++_lazyId);
+  LAZY_CONTENT[key] = contentFn;
+  return `<details${idAttr} data-lazy="${key}">
+    <summary><span class="tree-icon">${icon}</span> ${tag}${esc(displayLabel)}</summary>
+    <div class="tree-children"></div>
   </details>`;
 }
 
@@ -1167,12 +1341,166 @@ function kv(key, val) {
   return `<div class="kv"><span class="k">${esc(key)}</span><span class="v">${esc(String(val))}</span></div>`;
 }
 
+// ─── SEARCH INDEX ────────────────────────────────────
+const SEARCH_INDEX = [];
+function buildSearchIndex() {
+  PHASES.forEach(p => {
+    SEARCH_INDEX.push({type:'Phase', id:p.id, section:p.id, label:`${p.name} — ${p.full}`, keywords:`${p.name} ${p.full} ${p.desc}`, icon:p.icon});
+    const agents = p.agents || (p.groups ? p.groups.flatMap(g=>g.agents) : []);
+    agents.forEach(a => {
+      SEARCH_INDEX.push({type:'Agent', id:a.id, section:p.id, label:a.name, keywords:`${a.name} ${a.role}`, icon:'🤖'});
+    });
+  });
+  SOIC.dims.forEach(d => {
+    SEARCH_INDEX.push({type:'Dimension SOIC', id:d.id, section:'soic', label:`${d.id} — ${d.name}`, keywords:`${d.id} ${d.name} ${d.desc}`, icon:'📐'});
+  });
+  SOIC.gates.forEach(g => {
+    SEARCH_INDEX.push({type:'Gate', id:g.id, section:'soic', label:`${g.id} ${g.name}`, keywords:`${g.id} ${g.name} ${g.dim}`, icon:'🚪'});
+  });
+  LOI25.sections.forEach(sec => {
+    sec.checks.forEach(ch => {
+      SEARCH_INDEX.push({type:'Check Loi 25', id:ch.id, section:'loi25', label:`${ch.id}: ${ch.text}`, keywords:`${ch.id} ${ch.text}`, icon:'⚖'});
+    });
+  });
+  TEMPLATES.items.forEach(t => {
+    SEARCH_INDEX.push({type:'Template', id:t.id, section:'templates', label:t.name, keywords:`${t.name} ${t.role} ${t.category}`, icon:'📄'});
+  });
+  TOOLING.steps.forEach(s => {
+    SEARCH_INDEX.push({type:'Outil', id:s.id, section:'tooling', label:s.name, keywords:`${s.name} ${s.tool} ${s.desc}`, icon:'🔧'});
+  });
+  KNOWLEDGE.steps.forEach(s => {
+    SEARCH_INDEX.push({type:'Knowledge', id:s.id, section:'knowledge', label:s.name, keywords:`${s.name} ${s.desc}`, icon:'🧠'});
+  });
+  CONVERGENCE.decisions.forEach(d => {
+    SEARCH_INDEX.push({type:'Décision', id:d.id, section:'convergence', label:d.id, keywords:`${d.id} ${d.desc} ${d.action}`, icon:'🔄'});
+  });
+  SITE_UPDATE.agents.forEach(a => {
+    SEARCH_INDEX.push({type:'Agent', id:a.id, section:'site-update', label:a.name, keywords:`${a.name} ${a.role}`, icon:'🤖'});
+  });
+}
+
+function fuzzyMatch(query, text) {
+  const q = query.toLowerCase();
+  const t = text.toLowerCase();
+  const idx = t.indexOf(q);
+  if (idx === -1) return {match:false, score:0};
+  return {match:true, score: idx === 0 ? 100 : 50 - idx};
+}
+
+function searchQuery(q) {
+  if (!q || q.length < 2) return [];
+  const results = [];
+  SEARCH_INDEX.forEach(item => {
+    const m = fuzzyMatch(q, item.keywords);
+    if (m.match) results.push({...item, score:m.score});
+  });
+  results.sort((a,b) => b.score - a.score);
+  return results.slice(0, 12);
+}
+
+function renderSearchResults(results) {
+  const el = document.getElementById('search-results');
+  if (!results.length) { el.innerHTML = '<div style="padding:1rem;color:var(--text3);text-align:center;font-size:.8rem">Aucun résultat</div>'; return; }
+  const grouped = {};
+  results.forEach(r => { (grouped[r.type] = grouped[r.type] || []).push(r); });
+  let h = '';
+  Object.entries(grouped).forEach(([type, items]) => {
+    h += `<div class="search-result-group">${esc(type)}</div>`;
+    items.forEach(r => {
+      h += `<div class="search-result" data-section="${r.section}" data-id="${r.id}">
+        <span class="sr-icon">${r.icon}</span>
+        <span class="sr-label">${esc(r.label)}</span>
+        <span class="sr-type">${esc(r.section)}</span>
+      </div>`;
+    });
+  });
+  el.innerHTML = h;
+  el.querySelectorAll('.search-result').forEach(r => {
+    r.addEventListener('click', () => {
+      closeSearch();
+      nav(r.dataset.section, r.dataset.id);
+    });
+  });
+}
+
+function openSearch() {
+  const modal = document.getElementById('search-modal');
+  modal.hidden = false;
+  const input = document.getElementById('search-input');
+  input.value = '';
+  document.getElementById('search-results').innerHTML = '';
+  requestAnimationFrame(() => input.focus());
+}
+function closeSearch() {
+  document.getElementById('search-modal').hidden = true;
+}
+
+// ─── EXPORT SVG ──────────────────────────────────────
+function exportSVG() {
+  const svg = document.querySelector('#diagram-panel svg');
+  if (!svg) return;
+  const blob = new Blob([svg.outerHTML], {type:'image/svg+xml'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `nexos-${view}.svg`;
+  a.click();
+  URL.revokeObjectURL(a.href);
+}
+
+// ─── MINI PIPELINE TRACKER ───────────────────────────
+function miniPipeline(currentId) {
+  const phaseIds = ['ph0','ph1','ph2','ph3','ph4','ph5'];
+  const phaseColors = ['#3b82f6','#8b5cf6','#f59e0b','#10b981','#eab308','#ef4444'];
+  const isPhase = phaseIds.includes(currentId);
+  let h = '<div class="mini-pipeline">';
+  if (isPhase) {
+    phaseIds.forEach((pid, i) => {
+      if (i > 0) h += '<span class="mini-pip-line"></span>';
+      const active = pid === currentId;
+      h += `<span class="mini-pip-dot${active?' active':''}" style="color:${phaseColors[i]};${active?'border-color:'+phaseColors[i]+';background:'+phaseColors[i]:''}"></span>`;
+    });
+    const idx = phaseIds.indexOf(currentId);
+    h += `<span class="mini-pip-label">Phase ${idx}/5</span>`;
+  } else {
+    h += `<span class="mini-pip-label" style="margin-left:0">Module transversal — s'applique à toutes les phases</span>`;
+  }
+  h += '</div>';
+  return h;
+}
+
+// ─── SOIC EXAMPLE DATA ───────────────────────────────
+const SOIC_EXAMPLE = {
+  client: 'USINE_RH', mu: 9.39, verdict: 'PASS',
+  scores: {D1:9.5,D2:9.0,D3:9.5,D4:9.0,D5:10,D6:9.5,D7:9.0,D8:9.5,D9:9.5}
+};
+
 // ─── INIT ────────────────────────────────────────────
 document.addEventListener('DOMContentLoaded', () => {
+  // Build search index
+  buildSearchIndex();
+
   // Double-click on diagram goes back to macro (attached once)
   document.getElementById('diagram-panel').addEventListener('dblclick', () => {
     if (view !== 'macro') nav('macro');
   });
+
+  // Ctrl+K / Cmd+K → search
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 'k') {
+      e.preventDefault();
+      const modal = document.getElementById('search-modal');
+      if (modal.hidden) openSearch(); else closeSearch();
+    }
+    if (e.key === 'Escape') closeSearch();
+  });
+
+  // Search input handler
+  document.getElementById('search-input').addEventListener('input', (e) => {
+    renderSearchResults(searchQuery(e.target.value));
+  });
+
+  // Backdrop click closes search
+  document.querySelector('.search-backdrop').addEventListener('click', closeSearch);
 
   // Hash routing: read initial hash, listen for back/forward
   window.addEventListener('popstate', navFromHash);
