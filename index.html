@@ -3,11 +3,38 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="color-scheme" content="dark">
   <title>NEXOS v3.0 — Architecture Interactive</title>
-  <meta name="description" content="Visualiseur master-detail de l'architecture NEXOS v3.0">
+  <meta name="description" content="Visualiseur interactif de l'architecture NEXOS v3.0 — 46 agents, 6 phases, 9 dimensions SOIC, pipeline web autonome du brief au déploiement.">
+
+  <!-- Open Graph -->
+  <meta property="og:title" content="NEXOS v3.0 — Architecture Interactive">
+  <meta property="og:description" content="Pipeline web autonome : 46 agents IA, 6 phases, quality gates SOIC, conformité Loi 25 Québec.">
+  <meta property="og:type" content="website">
+  <meta property="og:locale" content="fr_CA">
+
+  <!-- Twitter Card -->
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="NEXOS v3.0 — Architecture Interactive">
+  <meta name="twitter:description" content="Pipeline web autonome : 46 agents IA, 6 phases, quality gates SOIC.">
+
+  <!-- Favicon (inline SVG) -->
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><rect width='100' height='100' rx='20' fill='%2306060f'/><text x='50' y='68' font-size='55' text-anchor='middle' fill='%236366f1'>N</text></svg>">
+
+  <!-- Font: JetBrains Mono (mono elements) -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;700&display=swap">
+
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
+  <noscript>
+    <div style="padding:2rem;text-align:center;color:#e4e4ef;font-family:system-ui">
+      <h1>NEXOS v3.0</h1>
+      <p>Ce visualiseur interactif nécessite JavaScript pour fonctionner.</p>
+    </div>
+  </noscript>
   <div id="app">
     <div id="breadcrumb" class="breadcrumb"></div>
     <div id="main">

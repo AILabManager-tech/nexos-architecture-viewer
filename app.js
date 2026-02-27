@@ -30,8 +30,10 @@ function arrow(x1,y1,x2,y2,flow=false,mk='ah') {
 function arrowP(d,flow=false,col='#555570',mk='ah') {
   return `<path d="${d}" stroke="${col}" stroke-width="1.5" fill="none" marker-end="url(#${mk})" ${flow?'class="flow-line"':''}/>`;
 }
-function nodeG(x,y,w,h,color,label,sub,dataId,rx=10) {
-  let s = `<g class="node" data-id="${dataId}" style="--glow-color:${color}80">`;
+function nodeG(x,y,w,h,color,label,sub,dataId,rx=10,tooltip='') {
+  const tip = tooltip || (sub ? `${label} — ${sub}` : label || '');
+  let s = `<g class="node" data-id="${dataId}" style="--glow-color:${color}80" tabindex="0" role="button" aria-label="${esc(tip)}">`;
+  s += `<title>${esc(tip)}</title>`;
   s += rect(x,y,w,h,color,.15,rx);
   if (label) s += txt(x+w/2, y+h/2-(sub?6:0), label, 11);
   if (sub) s += txt(x+w/2, y+h/2+10, sub, 8, 'rgba(255,255,255,.5)', 400);
@@ -362,14 +364,30 @@ function getAgent(sectionId, agentId) {
 }
 
 // ─── NAVIGATION ──────────────────────────────────────
+function updateHash() {
+  const hash = view === 'macro' ? '' : (selected ? `${view}/${selected}` : view);
+  const target = hash ? `#${hash}` : ' ';
+  if (location.hash.slice(1) !== hash) history.pushState(null, '', hash ? `#${hash}` : location.pathname);
+}
+
+function navFromHash() {
+  const h = location.hash.slice(1);
+  if (!h) { view = 'macro'; selected = null; }
+  else if (h.includes('/')) { const [v, s] = h.split('/'); view = v; selected = s; }
+  else { view = h; selected = null; }
+  render();
+}
+
 function nav(newView, nodeId) {
   view = newView;
   selected = nodeId || null;
+  updateHash();
   render();
 }
 
 function selectNode(nodeId) {
   selected = (selected === nodeId) ? null : nodeId;
+  updateHash();
   applyHighlight(selected);
   renderTree();
 }
@@ -377,12 +395,12 @@ function selectNode(nodeId) {
 // ─── BREADCRUMB ──────────────────────────────────────
 function renderBreadcrumb() {
   const el = document.getElementById('breadcrumb');
-  let h = `<span class="crumb ${view==='macro'?'current':''}" onclick="nav('macro')">🏠 NEXOS Pipeline</span>`;
+  let h = `<span class="crumb ${view==='macro'?'current':''}" data-nav="macro">🏠 NEXOS Pipeline</span>`;
   if (view !== 'macro') {
     const s = getSection(view);
     if (s) {
       h += `<span class="crumb-sep">›</span>`;
-      h += `<span class="crumb ${!selected?'current':''}" onclick="nav('${view}')">${s.icon||''} ${s.name} — ${s.full}</span>`;
+      h += `<span class="crumb ${!selected?'current':''}" data-nav="${view}">${s.icon||''} ${s.name} — ${s.full}</span>`;
     }
     if (selected) {
       const a = getAgent(view, selected);
@@ -392,6 +410,9 @@ function renderBreadcrumb() {
     }
   }
   el.innerHTML = h;
+  el.querySelectorAll('.crumb[data-nav]').forEach(c => {
+    c.addEventListener('click', () => nav(c.dataset.nav));
+  });
 }
 
 // ─── MAIN RENDER ─────────────────────────────────────
@@ -402,28 +423,44 @@ function render() {
 }
 
 // ─── DIAGRAM PANEL ───────────────────────────────────
+let _lastView = null;
 function renderDiagram() {
   const el = document.getElementById('diagram-panel');
+  const viewChanged = (_lastView !== view);
+  _lastView = view;
+
+  if (viewChanged) {
+    el.classList.add('view-fade');
+    requestAnimationFrame(() => {
+      if (view === 'macro') { el.innerHTML = renderMacroSVG(); }
+      else { el.innerHTML = renderSectionSVG(view); }
+      attachDiagramHandlers(el);
+      if (selected) applyHighlight(selected);
+      requestAnimationFrame(() => el.classList.remove('view-fade'));
+    });
+    return;
+  }
+
   if (view === 'macro') { el.innerHTML = renderMacroSVG(); }
   else { el.innerHTML = renderSectionSVG(view); }
-  // Attach click handlers on SVG nodes
+  attachDiagramHandlers(el);
+  if (selected) applyHighlight(selected);
+}
+
+function attachDiagramHandlers(el) {
   el.querySelectorAll('.node').forEach(n => {
-    n.addEventListener('click', (e) => {
+    const handler = (e) => {
       e.stopPropagation();
+      if (e.type === 'keydown' && e.key !== 'Enter' && e.key !== ' ') return;
+      if (e.type === 'keydown') e.preventDefault();
       const id = n.dataset.id;
       if (!id) return;
-      // In macro view, clicking navigates to section
       if (view === 'macro') { nav(id); }
-      // In section view, clicking selects/highlights a node
       else { selectNode(id); }
-    });
+    };
+    n.addEventListener('click', handler);
+    n.addEventListener('keydown', handler);
   });
-  // Double-click to go back
-  el.addEventListener('dblclick', () => {
-    if (view !== 'macro') nav('macro');
-  });
-  // Apply highlight if there's a selection
-  if (selected) applyHighlight(selected);
 }
 
 // ─── SVG: MACRO PIPELINE (Level 0) ──────────────────
@@ -543,7 +580,7 @@ function renderAgentsSVG(section, agents) {
     const ax = startX + i*(aW+gap);
     const acx = ax + aW/2;
     svg += arrowP(`M${cx},${orchY+45} C${cx},${orchY+70} ${acx},${orchY+70} ${acx},${agentY-2}`, true, section.color);
-    svg += nodeG(ax, agentY, aW, aH, section.color, a.name, a.role.substring(0,16)+'…', a.id);
+    svg += nodeG(ax, agentY, aW, aH, section.color, a.name, a.role.substring(0,16)+'…', a.id, 10, `${a.name} — ${a.role}`);
     svg += arrowP(`M${acx},${agentY+aH} C${acx},${agentY+aH+22} ${cx},${agentY+aH+22} ${cx},${outputY-2}`, false);
   });
 
@@ -595,7 +632,8 @@ function renderPh5SVG(phase) {
     svg += arrowP(`M${cx},${105} L${gx+gW/2},${gY-2}`, false, g.color);
     g.agents.forEach((a, ai) => {
       const ay = gY + gPad + ai*(aH+3);
-      svg += `<g class="node" data-id="${a.id}" style="--glow-color:${g.color}80">`;
+      svg += `<g class="node" data-id="${a.id}" style="--glow-color:${g.color}80" tabindex="0" role="button" aria-label="${esc(a.name+' — '+a.role)}">`;
+      svg += `<title>${esc(a.name+' — '+a.role)}</title>`;
       svg += rect(gx+3, ay, gW-6, aH, g.color, .12, 5, 1);
       svg += txt(gx+gW/2, ay+aH/2+1, a.name, 7, '#e4e4ef', 500);
       svg += '</g>';
@@ -676,7 +714,8 @@ function renderSoicSVG(s) {
     svg += `<line x1="${cx+Math.cos(angle)*44}" y1="${cy+Math.sin(angle)*44}" x2="${dx}" y2="${dy}" stroke="${dimC[i]}" stroke-width="1" stroke-opacity=".35"/>`;
     const cls = d.blocking ? ' class="pulse"' : '';
     svg += `<g${cls}>`;
-    svg += `<g class="node" data-id="${d.id}" style="--glow-color:${dimC[i]}80">`;
+    svg += `<g class="node" data-id="${d.id}" style="--glow-color:${dimC[i]}80" tabindex="0" role="button" aria-label="${esc(d.id+' '+d.name+' — '+d.desc)}">`;
+    svg += `<title>${esc(d.id+' '+d.name+': '+d.desc+(d.blocking?' (BLOQUANT)':''))}</title>`;
     svg += rect(dx-bw/2, dy-bh/2, bw, bh, dimC[i], .15, 7, d.blocking?2:1);
     svg += txt(dx, dy-6, `${d.id} ${d.name}`, 8, '#e4e4ef', d.blocking?700:500);
     svg += txt(dx, dy+7, `×${d.weight}${d.blocking?' ◄BLOQUANT':''}`, 6, d.blocking?'#ef4444':'rgba(255,255,255,.5)', d.blocking?700:400);
@@ -765,7 +804,8 @@ function renderTemplatesSVG(t) {
     svg += txt(cx+cW/2, 30, cat, 8, t.color, 700);
     cats[cat].forEach((item, ii) => {
       const iy = 15 + cPad + ii*(iH+3);
-      svg += `<g class="node" data-id="${item.id}" style="--glow-color:${t.color}80">`;
+      svg += `<g class="node" data-id="${item.id}" style="--glow-color:${t.color}80" tabindex="0" role="button" aria-label="${esc(item.name+' — '+item.role)}">`;
+      svg += `<title>${esc(item.name+': '+item.role)}</title>`;
       svg += rect(cx+3, iy, cW-6, iH, t.color, .12, 5, 1);
       svg += txt(cx+cW/2, iy+iH/2+1, item.name, 7, '#e4e4ef', 500);
       svg += '</g>';
@@ -802,7 +842,8 @@ function renderLoi25SVG(l) {
     svg += txt(sx+sW/2, 30, `${sec.id}. ${sec.name}`, 8, sec.color, 700);
     sec.checks.forEach((ch, ci) => {
       const cy = 15 + sPad + ci*(cH+2);
-      svg += `<g class="node" data-id="${ch.id}" style="--glow-color:${sec.color}80">`;
+      svg += `<g class="node" data-id="${ch.id}" style="--glow-color:${sec.color}80" tabindex="0" role="button" aria-label="${esc(ch.id+': '+ch.text)}">`;
+      svg += `<title>${esc(ch.id+': '+ch.text)}</title>`;
       svg += rect(sx+3, cy, sW-6, cH, sec.color, .1, 4, 1);
       svg += txt(sx+sW/2, cy+cH/2+1, `${ch.id}: ${ch.text.substring(0,22)}…`, 6.5, '#e4e4ef', 400);
       svg += '</g>';
@@ -851,12 +892,29 @@ function applyHighlight(selectedId) {
 }
 
 // ─── TREE PANEL ──────────────────────────────────────
+function treeControls() {
+  return `<div class="tree-controls">
+    <button class="tree-btn" data-action="expand">▾ Tout ouvrir</button>
+    <button class="tree-btn" data-action="collapse">▸ Tout fermer</button>
+  </div>`;
+}
+
+function attachTreeControls(el) {
+  el.querySelectorAll('.tree-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const open = btn.dataset.action === 'expand';
+      el.querySelectorAll('details').forEach(d => d.open = open);
+    });
+  });
+}
+
 function renderTree() {
   const el = document.getElementById('detail-panel');
-  if (view === 'macro') { el.innerHTML = renderMacroTree(); return; }
+  if (view === 'macro') { el.innerHTML = renderMacroTree(); attachTreeControls(el); return; }
   const s = getSection(view);
   if (!s) { el.innerHTML = ''; return; }
-  el.innerHTML = `<div class="tree-root">${buildSectionTree(s)}</div>`;
+  el.innerHTML = `${treeControls()}<div class="tree-root">${buildSectionTree(s)}</div>`;
+  attachTreeControls(el);
 
   // Auto-expand and scroll to selected node
   if (selected) {
@@ -877,7 +935,8 @@ function renderTree() {
 
 // ─── TREE: Macro overview ────────────────────────────
 function renderMacroTree() {
-  let h = '<div class="tree-root">';
+  let h = treeControls();
+  h += '<div class="tree-root">';
 
   // Stats summary
   h += detailsNode('📊', 'Récapitulatif NEXOS v3.0', true, () => {
@@ -1109,4 +1168,13 @@ function kv(key, val) {
 }
 
 // ─── INIT ────────────────────────────────────────────
-document.addEventListener('DOMContentLoaded', () => { render(); });
+document.addEventListener('DOMContentLoaded', () => {
+  // Double-click on diagram goes back to macro (attached once)
+  document.getElementById('diagram-panel').addEventListener('dblclick', () => {
+    if (view !== 'macro') nav('macro');
+  });
+
+  // Hash routing: read initial hash, listen for back/forward
+  window.addEventListener('popstate', navFromHash);
+  navFromHash();
+});
