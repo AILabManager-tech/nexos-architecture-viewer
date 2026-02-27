@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="50%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#8b5cf6"/>
+    </linearGradient>
+    <radialGradient id="bg" cx="35%" cy="30%" r="60%">
+      <stop offset="0%" stop-color="#1e1b4b" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#06060f" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="gw" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="8" result="b"/>
+      <feFlood flood-color="#6366f1" flood-opacity="0.35"/>
+      <feComposite in2="b" operator="in"/>
+      <feMerge><feMergeNode/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <rect width="512" height="512" rx="108" fill="#06060f"/>
+  <rect width="512" height="512" rx="108" fill="url(#bg)"/>
+
+  <g filter="url(#gw)">
+    <!-- N-shape pipeline paths -->
+    <path d="M 155,390 L 155,122" stroke="url(#g)" stroke-width="6" fill="none" stroke-linecap="round" stroke-dasharray="8 5" opacity="0.45"/>
+    <path d="M 155,145 C 210,145 302,367 357,367" stroke="url(#g)" stroke-width="6" fill="none" stroke-linecap="round" stroke-dasharray="8 5" opacity="0.45"/>
+    <path d="M 357,390 L 357,122" stroke="url(#g)" stroke-width="6" fill="none" stroke-linecap="round" stroke-dasharray="8 5" opacity="0.45"/>
+
+    <!-- 4 corner nodes (larger for favicon readability) -->
+    <circle cx="155" cy="390" r="32" fill="#06060f" stroke="url(#g)" stroke-width="4"/>
+    <circle cx="155" cy="390" r="18" fill="url(#g)"/>
+    <circle cx="155" cy="122" r="32" fill="#06060f" stroke="url(#g)" stroke-width="4"/>
+    <circle cx="155" cy="122" r="18" fill="url(#g)"/>
+    <circle cx="357" cy="122" r="32" fill="#06060f" stroke="url(#g)" stroke-width="4"/>
+    <circle cx="357" cy="122" r="18" fill="url(#g)"/>
+    <circle cx="357" cy="390" r="32" fill="#06060f" stroke="url(#g)" stroke-width="4"/>
+    <circle cx="357" cy="390" r="18" fill="url(#g)"/>
+
+    <!-- Center node (diagonal) -->
+    <circle cx="256" cy="256" r="26" fill="#06060f" stroke="#6366f1" stroke-width="3.5"/>
+    <circle cx="256" cy="256" r="14" fill="#6366f1"/>
+  </g>
+</svg>

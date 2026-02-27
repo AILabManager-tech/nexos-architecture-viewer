@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <!-- Main gradient: indigo to purple -->
+    <linearGradient id="grad-main" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#3b82f6"/>
+      <stop offset="50%" stop-color="#6366f1"/>
+      <stop offset="100%" stop-color="#8b5cf6"/>
+    </linearGradient>
+    <!-- Glow gradient for accent -->
+    <linearGradient id="grad-glow" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6366f1" stop-opacity="0.4"/>
+      <stop offset="100%" stop-color="#8b5cf6" stop-opacity="0"/>
+    </linearGradient>
+    <!-- Background subtle radial -->
+    <radialGradient id="bg-glow" cx="35%" cy="30%" r="60%">
+      <stop offset="0%" stop-color="#1e1b4b" stop-opacity="0.5"/>
+      <stop offset="100%" stop-color="#06060f" stop-opacity="0"/>
+    </radialGradient>
+    <!-- Node glow filter -->
+    <filter id="node-glow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="6" result="blur"/>
+      <feComposite in="SourceGraphic" in2="blur" operator="over"/>
+    </filter>
+    <!-- Outer glow -->
+    <filter id="outer-glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="12" result="blur"/>
+      <feFlood flood-color="#6366f1" flood-opacity="0.3"/>
+      <feComposite in2="blur" operator="in"/>
+      <feMerge>
+        <feMergeNode/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <!-- Background rounded square -->
+  <rect width="512" height="512" rx="96" fill="#06060f"/>
+  <rect width="512" height="512" rx="96" fill="url(#bg-glow)"/>
+
+  <!-- Subtle grid pattern (pipeline feel) -->
+  <g opacity="0.04" stroke="#6366f1" stroke-width="1">
+    <line x1="128" y1="0" x2="128" y2="512"/>
+    <line x1="256" y1="0" x2="256" y2="512"/>
+    <line x1="384" y1="0" x2="384" y2="512"/>
+    <line x1="0" y1="128" x2="512" y2="128"/>
+    <line x1="0" y1="256" x2="512" y2="256"/>
+    <line x1="0" y1="384" x2="512" y2="384"/>
+  </g>
+
+  <!-- Pipeline paths forming the "N" shape -->
+  <g filter="url(#outer-glow)">
+    <!-- Left vertical pipeline (ascending) -->
+    <path d="M 145,380 L 145,132" stroke="url(#grad-main)" stroke-width="5" fill="none" stroke-linecap="round" stroke-dasharray="8 4" opacity="0.5"/>
+
+    <!-- Diagonal pipeline (connecting L to R) -->
+    <path d="M 145,155 C 200,155 312,357 367,357" stroke="url(#grad-main)" stroke-width="5" fill="none" stroke-linecap="round" stroke-dasharray="8 4" opacity="0.5"/>
+
+    <!-- Right vertical pipeline (ascending) -->
+    <path d="M 367,380 L 367,132" stroke="url(#grad-main)" stroke-width="5" fill="none" stroke-linecap="round" stroke-dasharray="8 4" opacity="0.5"/>
+  </g>
+
+  <!-- N-shape nodes: main structural nodes -->
+  <g filter="url(#node-glow)">
+    <!-- Bottom-left node -->
+    <circle cx="145" cy="380" r="22" fill="#06060f" stroke="url(#grad-main)" stroke-width="3"/>
+    <circle cx="145" cy="380" r="12" fill="url(#grad-main)" opacity="0.9"/>
+
+    <!-- Top-left node -->
+    <circle cx="145" cy="132" r="22" fill="#06060f" stroke="url(#grad-main)" stroke-width="3"/>
+    <circle cx="145" cy="132" r="12" fill="url(#grad-main)" opacity="0.9"/>
+
+    <!-- Mid-left node (on vertical) -->
+    <circle cx="145" cy="256" r="16" fill="#06060f" stroke="#3b82f6" stroke-width="2.5"/>
+    <circle cx="145" cy="256" r="8" fill="#3b82f6" opacity="0.8"/>
+
+    <!-- Diagonal mid node -->
+    <circle cx="256" cy="256" r="18" fill="#06060f" stroke="#6366f1" stroke-width="2.5"/>
+    <circle cx="256" cy="256" r="10" fill="#6366f1" opacity="0.85"/>
+
+    <!-- Bottom-right node (diagonal end) -->
+    <circle cx="367" cy="357" r="16" fill="#06060f" stroke="#8b5cf6" stroke-width="2.5"/>
+    <circle cx="367" cy="357" r="8" fill="#8b5cf6" opacity="0.8"/>
+
+    <!-- Top-right node -->
+    <circle cx="367" cy="132" r="22" fill="#06060f" stroke="url(#grad-main)" stroke-width="3"/>
+    <circle cx="367" cy="132" r="12" fill="url(#grad-main)" opacity="0.9"/>
+
+    <!-- Bottom-right node (vertical) -->
+    <circle cx="367" cy="380" r="22" fill="#06060f" stroke="url(#grad-main)" stroke-width="3"/>
+    <circle cx="367" cy="380" r="12" fill="url(#grad-main)" opacity="0.9"/>
+
+    <!-- Mid-right node (on vertical) -->
+    <circle cx="367" cy="245" r="16" fill="#06060f" stroke="#8b5cf6" stroke-width="2.5"/>
+    <circle cx="367" cy="245" r="8" fill="#8b5cf6" opacity="0.8"/>
+  </g>
+
+  <!-- Tiny accent connection dots on diagonal -->
+  <circle cx="178" cy="188" r="4" fill="#3b82f6" opacity="0.6"/>
+  <circle cx="215" cy="220" r="3.5" fill="#6366f1" opacity="0.5"/>
+  <circle cx="297" cy="292" r="3.5" fill="#7c3aed" opacity="0.5"/>
+  <circle cx="334" cy="325" r="4" fill="#8b5cf6" opacity="0.6"/>
+
+  <!-- "NEXOS" text below the N -->
+  <text x="256" y="460" text-anchor="middle" font-family="system-ui, -apple-system, sans-serif" font-size="42" font-weight="800" letter-spacing="8" fill="url(#grad-main)">NEXOS</text>
+
+  <!-- Version tag -->
+  <text x="256" y="485" text-anchor="middle" font-family="system-ui, sans-serif" font-size="14" font-weight="600" letter-spacing="3" fill="#555570">v3.0</text>
+</svg>
